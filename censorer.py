@@ -1,5 +1,3 @@
-import pprint
-import sys
 import cv2
 import numpy as np
 import mss
@@ -10,8 +8,8 @@ from PyQt5.QtCore import Qt
 import threading
 from nudenet import NudeDetector
 import time
-import os
 from skimage.metrics import structural_similarity as ssim
+from utils import delete_rename_file
 
 SCREEN_IMAGE_PATH = "./inputs/input.png"
 CURRENT_SCREEN_IMAGE_PATH = "./inputs/current-input.png"
@@ -20,7 +18,6 @@ IMAGE_SIMILARITY = 80       # for now use similarity to check whether images are
 
 nude_detector = NudeDetector()
 app = QApplication([])
-pp = pprint.PrettyPrinter(indent=1, width=80, depth=None)
 censor_blocks = []
 
 class TransparentWindow(QMainWindow):
@@ -64,9 +61,6 @@ class TransparentWindow(QMainWindow):
             self.width() - 2 * self.pen_size,
             self. height() - 2 * self.pen_size)
         painter.end()
-
-def print(args: str):
-    pp.pprint(args)
 
 def capture_save_screen():
     with mss.mss() as sct:
@@ -186,18 +180,6 @@ def check_image_similarity(image1_path, image2_path):
     similarity_percentage = score * 100
 
     return similarity_percentage > IMAGE_SIMILARITY
-
-def delete_rename_file(old_name, new_name):
-    try:
-        os.remove(new_name)
-        os.rename(old_name, new_name)
-        # print(f"File renamed from {old_name} to {new_name}")
-    except FileNotFoundError:
-        print(f"The file {old_name} does not exist.")
-    except PermissionError:
-        print(f"Permission denied to rename the file {old_name}.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
 
 def censoring_task():
     time.sleep(1)
