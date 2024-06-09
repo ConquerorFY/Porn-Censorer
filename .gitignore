@@ -4,3 +4,4 @@ share/
 pyvenv.cfg
 Include/
 __pycache__/
+inputs/
