@@ -5,6 +5,7 @@ import mss
 import mss.tools
 
 SCREEN_IMAGE_PATH = "./inputs/input.png"
+CENSOR_SCREEN_IMAGE_PATH = "./inputs/input-censored.png"
 
 pp = pprint.PrettyPrinter(indent=1, width=80, depth=None)
 
@@ -22,17 +23,36 @@ def capture_save_screen():
         img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         cv2.imwrite(SCREEN_IMAGE_PATH, img_bgr)
 
-def capture_and_censor_screen(area, censor_mode='pixelate'):
-    print(area)
+def capture_and_censor_screen(detection_areas, censor_mode='pixelate'):
     # Pixelate function
-    def pixelate_area(image, blocks=10):
-        height, width = image.shape[:2]
-        temp = cv2.resize(image, (blocks, blocks), interpolation=cv2.INTER_LINEAR)
-        return cv2.resize(temp, (width, height), interpolation=cv2.INTER_NEAREST)
+    def pixelate_area(image, top_left, bottom_right, blocks=10):
+        # Extract the region of interest (ROI)
+        x1, y1 = top_left
+        x2, y2 = bottom_right
+        roi = image[y1:y2, x1:x2]
+
+        # Pixelate the ROI
+        height, width = roi.shape[:2]
+        temp = cv2.resize(roi, (blocks, blocks), interpolation=cv2.INTER_LINEAR)
+        roi_pixelated = cv2.resize(temp, (width, height), interpolation=cv2.INTER_NEAREST)
+
+        # Replace the ROI in the original image with the pixelated ROI
+        image[y1:y2, x1:x2] = roi_pixelated
+        return image
 
     # Blur function
-    def blur_area(image, ksize=(25, 25)):
-        return cv2.GaussianBlur(image, ksize, 0)
+    def blur_area(image, top_left, bottom_right, ksize=(25, 25)):
+        # Extract the region of interest (ROI)
+        x1, y1 = top_left
+        x2, y2 = bottom_right
+        roi = image[y1:y2, x1:x2]
+
+        # Apply Gaussian blur to the ROI
+        roi_blurred = cv2.GaussianBlur(roi, ksize, 0)
+
+        # Replace the ROI in the original image with the blurred ROI
+        image[y1:y2, x1:x2] = roi_blurred
+        return image
 
     with mss.mss() as sct:
         monitor = sct.monitors[1]  # Use the first monitor
@@ -41,19 +61,25 @@ def capture_and_censor_screen(area, censor_mode='pixelate'):
 
             # Remove the alpha channel (mss returns BGRA)
             frame = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+            
+            for area in detection_areas:
+                box = area.get('box')
+                x = box[0]
+                y = box[1]
+                width = box[2]
+                height = box[3]
+                # Censor the specified area
+                if censor_mode == 'blur':
+                    frame = blur_area(frame, (x, y), (x + width, y+ height))
+                elif censor_mode == 'pixelate':
+                    frame = pixelate_area(frame, (x, y), (x + width, y+ height))
 
-            # Censor the specified area
-            if censor_mode == 'blur':
-                censored_frame = blur_area(frame)
-            elif censor_mode == 'pixelate':
-                censored_frame = pixelate_area(frame)
-            else:
-                censored_frame = frame
-
-            cv2.imshow('Censored Screen', censored_frame)
+            # cv2.imshow('Censored Screen', frame)
+            cv2.imwrite(CENSOR_SCREEN_IMAGE_PATH, frame)
+            break
 
             # Break the loop when 'q' key is pressed
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            # if cv2.waitKey(1) & 0xFF == ord('q'):
+            #     break
 
     cv2.destroyAllWindows()
