@@ -1,7 +1,4 @@
-from nudenet import NudeDetector
-from utils import capture_and_censor_screen, capture_save_screen, SCREEN_IMAGE_PATH
-
-nude_detector = NudeDetector()
+import censorer as c
 
 # ** Sample Detection Output **
 # [
@@ -27,8 +24,4 @@ nude_detector = NudeDetector()
 #     }
 # ]
 
-while True:
-    capture_save_screen()
-    detections = nude_detector.detect(SCREEN_IMAGE_PATH)
-    if len(detections) > 0:
-        capture_and_censor_screen(detections)
+c.start_exec()
