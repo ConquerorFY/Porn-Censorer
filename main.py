@@ -1,4 +1,5 @@
 import censorer as c
+import signal
 
 # ** Sample Detection Output **
 # [
@@ -24,4 +25,5 @@ import censorer as c
 #     }
 # ]
 
+signal.signal(signal.SIGINT, signal.SIG_DFL)    # Force quit using CTRL + C (when focus on executing terminal)
 c.start_exec()

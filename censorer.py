@@ -186,7 +186,7 @@ def censoring_task():
     while True:
         capture_save_screen()
         if (not check_image_similarity(CURRENT_SCREEN_IMAGE_PATH, SCREEN_IMAGE_PATH)):
-            # if images (current and previous) are not similar by 60%
+            # If images (current and previous) are not similar by 60%
             delete_rename_file(CURRENT_SCREEN_IMAGE_PATH, SCREEN_IMAGE_PATH)
             detections = nude_detector.detect(SCREEN_IMAGE_PATH)
             # print(detections)
