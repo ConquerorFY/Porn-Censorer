@@ -4,7 +4,7 @@ import mss
 import mss.tools
 from PyQt5.QtGui import (QPainter, QPen, QColor)
 from PyQt5.QtWidgets import (QMainWindow, QApplication)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import (Qt, pyqtSignal, QObject)
 import threading
 from nudenet import NudeDetector
 import time
@@ -16,9 +16,9 @@ CURRENT_SCREEN_IMAGE_PATH = "./inputs/current-input.png"
 CENSOR_SCREEN_IMAGE_PATH = "./inputs/input-censored.png"
 IMAGE_SIMILARITY = 80       # for now use similarity to check whether images are the same (before and after censored)
 
-nude_detector = NudeDetector()
-app = QApplication([])
-censor_blocks = []
+class Communicate(QObject):
+    position = pyqtSignal(int, int, int, int)
+    isNotSexual = pyqtSignal(bool)
 
 class TransparentWindow(QMainWindow):
     def __init__(
@@ -30,10 +30,10 @@ class TransparentWindow(QMainWindow):
             pen_color: str,
             pen_size: int):
         super().__init__()
-        self.highlight_x = x
-        self.highlight_y = y
-        self.highlight_width = width
-        self.highlight_height = height
+        self._x = x
+        self._y = y
+        self._width = width
+        self._height = height
         self.pen_color = pen_color
         self.pen_size = pen_size
         # Set window flag to stay on top
@@ -43,10 +43,10 @@ class TransparentWindow(QMainWindow):
     def initUI(self):
         """Initialize the user interface of the window."""
         self.setGeometry(
-            self.highlight_x,
-            self.highlight_y,
-            self.highlight_width + self.pen_size,
-            self.highlight_height + self.pen_size)
+            self._x,
+            self._y,
+            self._width + self.pen_size,
+            self._height + self.pen_size)
         self.setStyleSheet('background: transparent')
         self.setWindowFlag(Qt.FramelessWindowHint)
 
@@ -59,8 +59,13 @@ class TransparentWindow(QMainWindow):
             self.pen_size - 1,
             self.pen_size - 1,
             self.width() - 2 * self.pen_size,
-            self. height() - 2 * self.pen_size)
+            self.height() - 2 * self.pen_size)
         painter.end()
+
+nude_detector = NudeDetector()
+app = QApplication([])
+comm = Communicate()
+censor_blocks = []
 
 def capture_save_screen():
     with mss.mss() as sct:
@@ -73,7 +78,7 @@ def capture_save_screen():
         img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         cv2.imwrite(CURRENT_SCREEN_IMAGE_PATH, img_bgr)
 
-def capture_and_censor_screen(detection_areas, censor_mode='blur'):
+def capture_and_censor_screen(detection_areas, censor_mode=''):
     # Pixelate function
     def pixelate_area(image, top_left, bottom_right, blocks=10):
         # Extract the region of interest (ROI)
@@ -123,7 +128,7 @@ def capture_and_censor_screen(detection_areas, censor_mode='blur'):
                     frame = blur_area(frame, (x, y), (x + width, y+ height))
                 elif censor_mode == 'pixelate':
                     frame = pixelate_area(frame, (x, y), (x + width, y+ height))
-                draw_censor_block(x, y, width, height)
+                send_draw_censor_block_signal(x, y, width, height)
 
             # cv2.imshow('Censored Screen', frame)
             cv2.imwrite(CENSOR_SCREEN_IMAGE_PATH, frame)
@@ -131,21 +136,29 @@ def capture_and_censor_screen(detection_areas, censor_mode='blur'):
 
     cv2.destroyAllWindows()
 
-def clear_censor_blocks():
-    global censor_blocks
-    for block in censor_blocks:
-        block.close()
-        # block.hide()
-    censor_blocks = []
+def send_draw_censor_block_signal(x: int, y: int, width: int, height: int):
+    comm.position.emit(x, y, width, height)
+    comm.isNotSexual.emit(False)
+
+def send_clear_censor_block_signal():
+    comm.isNotSexual.emit(True)
+
+def clear_censor_blocks(isNotSexual):
+    if isNotSexual:
+        global censor_blocks
+        for block in censor_blocks:
+            # block.close()
+            block.hide()
+        censor_blocks = []
 
 def draw_censor_block(
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-        pen_color: str = '#000000',
-        pen_size: int = 2):
-    """ 
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    pen_color: str = '#00ff00',
+    pen_size: int = 2):
+        """ 
         Censors an area as a rectangle on the main screen.
             -> `x`: x position of the rectangle
 
@@ -158,11 +171,11 @@ def draw_censor_block(
             -> `pen_color` (Optional): color of the rectangle as a hex value; defaults to `#000000`
 
             -> `pen_size` (Optional): border size of the rectangle; defaults to 2
-    """
-    global censor_blocks
-    window = TransparentWindow(x, y, width, height, pen_color, pen_size)
-    window.show()
-    censor_blocks.append(window)
+        """
+        global censor_blocks
+        window = TransparentWindow(x, y, width, height, pen_color, pen_size)
+        window.show()
+        censor_blocks.append(window)
 
 def check_image_similarity(image1_path, image2_path):
     # Read the images in grayscale mode
@@ -186,14 +199,16 @@ def censoring_task():
     while True:
         capture_save_screen()
         if (not check_image_similarity(CURRENT_SCREEN_IMAGE_PATH, SCREEN_IMAGE_PATH)):
-            # If images (current and previous) are not similar by 60%
+            # If images (current and previous) are not similar
             delete_rename_file(CURRENT_SCREEN_IMAGE_PATH, SCREEN_IMAGE_PATH)
             detections = nude_detector.detect(SCREEN_IMAGE_PATH)
             # print(detections)
             if len(detections) > 0: capture_and_censor_screen(detections)
-            else: clear_censor_blocks()
+            else: send_clear_censor_block_signal()
 
-def start_exec():
+def start_exec():    
     censorer_thread = threading.Thread(target=censoring_task)
     censorer_thread.start()
+    comm.position.connect(draw_censor_block)
+    comm.isNotSexual.connect(clear_censor_blocks)
     app.exec_()
