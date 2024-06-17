@@ -14,7 +14,7 @@ from utils import delete_rename_file
 SCREEN_IMAGE_PATH = "./inputs/input.png"
 CURRENT_SCREEN_IMAGE_PATH = "./inputs/current-input.png"
 CENSOR_SCREEN_IMAGE_PATH = "./inputs/input-censored.png"
-IMAGE_SIMILARITY = 80       # for now use similarity to check whether images are the same (before and after censored)
+IMAGE_SIMILARITY = 85       # for now use similarity to check whether images are the same (before and after censored)
 
 class Communicate(QObject):
     position = pyqtSignal(int, int, int, int)
@@ -181,6 +181,8 @@ def check_image_similarity(image1_path, image2_path):
     # Read the images in grayscale mode
     image1 = cv2.imread(image1_path, cv2.IMREAD_GRAYSCALE)
     image2 = cv2.imread(image2_path, cv2.IMREAD_GRAYSCALE)
+    (H, W) = image1.shape
+    image2 = cv2.resize(image2, (W, H))
 
     if image1 is None or image2 is None:
         raise ValueError("One of the images could not be read. Please check the file paths.")
@@ -199,6 +201,7 @@ def censoring_task():
     while True:
         capture_save_screen()
         if (not check_image_similarity(CURRENT_SCREEN_IMAGE_PATH, SCREEN_IMAGE_PATH)):
+            send_clear_censor_block_signal()
             # If images (current and previous) are not similar
             delete_rename_file(CURRENT_SCREEN_IMAGE_PATH, SCREEN_IMAGE_PATH)
             detections = nude_detector.detect(SCREEN_IMAGE_PATH)
